@@ -281,40 +281,193 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 #before correction
-sns.boxplot(dfs[2021]['final_amount_inr'])
-plt.show()
+#sns.boxplot(dfs[2021]['final_amount_inr'])
+#plt.show()
 
 def correct_price_outliers(dfs, price_col='final_amount_inr', factor_threshold=10):
     for year in sorted(dfs):
         df = dfs[year]
-        if price_col not in df.columns:
-            print(f"--- {year} --- {price_col} column not found")
-            continue
-        # Calculate median price per product (or category if available)
-        group_col = 'product_id' if 'product_id' in df.columns else None
-        if group_col:
-            medians = df.groupby(group_col)[price_col].median()
-            # Find outliers: price > factor_threshold * median
-            def fix_price(row):
-                median = medians.get(row[group_col], np.nan)
-                price = row[price_col]
-                if median > 0 and price > factor_threshold * median:
-                    # Try dividing by 10, 100, or 1000
-                    for factor in [10, 100, 1000]:
-                        if abs(price / factor - median) < median:
-                            return price / factor
-                return price
-            df['final_amount_inr'] = df.apply(fix_price, axis=1)
-        else:
-            # Fallback: use global median
-            median = df[price_col].median()
-            df.loc[df[price_col] > factor_threshold * median, price_col] = \
-                df.loc[df[price_col] > factor_threshold * median, price_col] / 100
-        print(f"{year}: Outlier correction done for {price_col}")
-
+        if price_col in df.columns:
+            median_price = df[price_col].median()
+            def _correct_price(x):
+                if x >= factor_threshold * median_price:
+                    return x / 100
+                return x
+            df[price_col] = df[price_col].apply(_correct_price)
 correct_price_outliers(dfs)
 
 #after correction
-sns.boxplot(dfs[2021]['final_amount_inr'])
+#sns.boxplot(dfs[2021]['final_amount_inr'])
+#plt.show()
+
+#Q10 - Standardize payment methods
+#Standardize payment method categories and create a 
+# clean categorical hierarchy.
+
+def unique_payment_names(dfs):
+    col_variants = ('payment_method','Payment Method','paymentMethod','Payment_Method')
+    payments = {}
+    for year in sorted(dfs):
+        df = dfs[year]
+        for col in col_variants:
+            if col in df.columns:
+                df[col] = df[col].fillna('').str.lower().str.strip()
+                df[col] = df[col].str.replace(r'[^\w\s]', '', regex=True)  # remove punctuation
+                df[col] = df[col].str.replace(r'\s+', ' ', regex=True)     # normalize whitespace
+                payments.update({name: True for name in df[col].unique() if name})
+                break
+        else:
+            print(f"--- {year} --- payment column not found")
+    return payments
+
+all_payments = unique_payment_names(dfs)
+print(all_payments)
+#As payment category is clean, no mapping is required.
+
+
+#.....Exploratory Data Analysis Questions......
+
+#Q1 - Yearly Sales Trend Analysis
+#Create a comprehensive revenue trend analysis showing yearly revenue growth from 
+# 2015-2025. Include percentage growth rates, trend lines, 
+# and highlight key growth periods with annotations.
+
+revenue = {}
+for year in sorted(dfs):
+    df = dfs[year]
+    revenue[year] = df['final_amount_inr'].sum()
+
+print(revenue)
+
+# Convert revenue dict to DataFrame
+revenue_df = pd.DataFrame(list(revenue.items()), columns=['Year', 'Total Revenue'])
+
+# Sort by Year (if needed)
+revenue_df = revenue_df.sort_values('Year')
+
+# Calculate percentage growth rates
+revenue_df['Pct Growth'] = revenue_df['Total Revenue'].pct_change() * 100
+
+# Plot revenue and trend line
+plt.figure(figsize=(10,6))
+sns.lineplot(data=revenue_df, x='Year', y='Total Revenue', marker='o', label='Revenue')
+
+# Add trend line (linear regression)
+sns.regplot(data=revenue_df, x='Year', y='Total Revenue', scatter=False, color='red', label='Trend Line')
+
+# Annotate key growth periods
+max_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Year']
+max_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Total Revenue']
+plt.annotate(f'Max Growth: {max_growth_year}', 
+             xy=(max_growth_year, max_growth_val), 
+             xytext=(max_growth_year, max_growth_val*1.05),
+             arrowprops=dict(facecolor='green', shrink=0.05),
+             fontsize=10, color='green')
+
+min_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Year']
+min_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Total Revenue']
+plt.annotate(f'Min Growth: {min_growth_year}', 
+             xy=(min_growth_year, min_growth_val), 
+             xytext=(min_growth_year, min_growth_val*0.95),
+             arrowprops=dict(facecolor='red', shrink=0.05),
+             fontsize=10, color='red')
+
+plt.title('Yearly Revenue Trend (2015-2025) with Growth Rates & Trend Line')
+plt.xlabel('Year')
+plt.ylabel('Total Revenue (INR)')
+plt.legend()
+plt.tight_layout()
 plt.show()
 
+#Q2 - Sales analysis
+#Analyze seasonal patterns in sales data. 
+#Create monthly sales heatmaps and identify peak selling months.
+#Compare seasonal trends across different years and categories.
+
+# Combine all data into a single DataFrame with Year and Month columns
+combined_data = []
+for year in sorted(dfs):
+    df = dfs[year]
+    if 'order_date' in df.columns:
+        df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+        df['Year'] = year
+        df['Month'] = df['order_date'].dt.month
+        combined_data.append(df)            
+all_data = pd.concat(combined_data, ignore_index=True)
+# Group by Year and Month to get total sales
+monthly_sales = all_data.groupby(['Year', 'Month'])['final_amount_inr'].sum()
+# set monthly sales in million INR for better visualization
+monthly_sales = monthly_sales / 1_000_000 # convert to million INR
+# Pivot for heatmap
+sales_pivot = monthly_sales.unstack(level=0).fillna(0)
+plt.figure(figsize=(12, 6))
+sns.heatmap(sales_pivot, annot=True, fmt=".0f", cmap="YlGnBu")
+plt.title('Monthly Sales in million INR (2015-2025)')
+plt.xlabel('Year')
+plt.ylabel('Month')
+plt.tight_layout()              
+plt.show()
+
+#Q3 - Customer Segmentation Analysis
+
+#Build a customer segmentation analysis using RFM 
+# (Recency, Frequency, Monetary) methodology. 
+# Create scatter plots and segment customers into 
+# meaningful groups with actionable insights.
+
+# Calculate RFM metrics
+import datetime as dt
+latest_date = dt.datetime(2025, 12, 31)
+rfm_data = []
+for year in sorted(dfs):
+    df = dfs[year]
+    if 'customer_id' in df.columns and 'order_date' in df.columns and 'final_amount_inr' in df.columns:
+        df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+        rfm = df.groupby('customer_id').agg({
+            'order_date': lambda x: (latest_date - x.max()).days,
+            'customer_id': 'count',
+            'final_amount_inr': 'sum'
+        }).rename(columns={
+            'order_date': 'Recency',
+            'customer_id': 'Frequency',
+            'final_amount_inr': 'Monetary'
+        })
+        rfm_data.append(rfm)
+rfm_df = pd.concat(rfm_data, ignore_index=True) 
+
+##Groups customers into segments based on their RFM scores, 
+# such as "Champions" (high R, F, M), 
+# "Potential Loyalists" (high R, good spending, average F), 
+# or "At Risk" customers (declining R, historically high F/M). 
+# These segments can guide targeted marketing strategies.
+
+# Heatmap of RFM
+plt.figure(figsize=(10, 6))
+
+sns.heatmap(rfm_df.corr(), annot=True, cmap="coolwarm")
+plt.title('RFM Correlation Heatmap')
+plt.tight_layout()
+plt.show()  
+
+#Q4 - Payment Method Evolution Analysis
+
+#evolution of payment methods from 2015-2025. Show the rise of UPI, decline of COD, and create stacked area charts to demonstrate market share changes over time.
+payment_trends = []
+for year in sorted(dfs):
+    df = dfs[year]
+    if 'payment_method' in df.columns and 'final_amount_inr' in df.columns:
+        payment_summary = df.groupby('payment_method')['final_amount_inr'].sum().reset_index()
+        payment_summary['Year'] = year
+        payment_trends.append(payment_summary)
+payment_trends_df = pd.concat(payment_trends, ignore_index=True)
+payment_pivot = payment_trends_df.pivot(index='Year', columns='payment_method', values='final_amount_inr').fillna(0)
+payment_pivot_pct = payment_pivot.div(payment_pivot.sum(axis=1), axis=0) * 100
+payment_pivot_pct.plot(kind='area', stacked=True, figsize=(12, 6), colormap='tab20')
+plt.title('Payment Method Market Share Evolution (2015-2025)')
+plt.xlabel('Year')
+plt.ylabel('Market Share (%)')
+plt.legend(title='Payment Method', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.show()
+
+#Q5
