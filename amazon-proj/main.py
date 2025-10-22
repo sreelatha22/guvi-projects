@@ -248,15 +248,73 @@ clean_delivery_days(dfs)
 # and amount appear multiple times. 
 
 for year in sorted(dfs):
+    df = dfs[year]
+    cols = ['customer_id', 'product_id', 'order_date', 'quantity','final_amount_inr']
+    #exact_duplicate: all columns identical -> drop duplicates (keep first)
+    # ensure quantity is numeric
+    df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+    mask = df.duplicated(subset=cols, keep = 'first')
+    ## keep bulk order: order_id present and identical across group
+    order_col = 'order_id'
+    if order_col in df.columns:
+        quantity_threshold = 15
+        # ensure quantity exists and is numeric
+        df['quantity'] = pd.to_numeric(df.get('quantity', 0), errors='coerce').fillna(0)
+        # handle possible NaN order_id by including them with dropna=False (pandas >=1.1)
+        try:
+            order_quant = df.groupby('order_id', dropna=False)['quantity'].sum().reset_index()
+        except TypeError:
+            order_quant = df.groupby('order_id')['quantity'].sum().reset_index()
+        bulk_orders = order_quant['order_id']['quantity'] > quantity_threshold
+        bulk_order_ids = set(bulk_orders['order_id'].unique())
+        # exclude bulk orders from duplicates
+        mask = mask & (~df['order_id'].isin(bulk_order_ids))
+        num_duplicates = mask.sum()
+        print(num_duplicates)
+        if num_duplicates > 0:
+            df.drop(index=df[mask].index, inplace=True)
+        
+
+#Q9 - Correcting for outlier prices - decimals
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+#before correction
+sns.boxplot(dfs[2021]['final_amount_inr'])
+plt.show()
+
+def correct_price_outliers(dfs, price_col='final_amount_inr', factor_threshold=10):
+    for year in sorted(dfs):
         df = dfs[year]
-        cols = ['customer_id', 'product_id', 'order_date', 'quantity','final_amount_inr']
-        #exact_duplicate: all columns identical -> drop duplicates (keep first)
-        mask = df.duplicated(subset=cols, keep = 'first')
-        ## keep bulk order: order_id present and identical across group
-        pivot_df = df[mask].copy()
-        pivot_df = pd.DataFrame(pivot_df) 
-        pivot_df = pivot_df.pivot_table(columns=['customer_id','product_id'], values='quantity', aggfunc='sum', fill_value = 0)
-        print(pivot_df)
+        if price_col not in df.columns:
+            print(f"--- {year} --- {price_col} column not found")
+            continue
+        # Calculate median price per product (or category if available)
+        group_col = 'product_id' if 'product_id' in df.columns else None
+        if group_col:
+            medians = df.groupby(group_col)[price_col].median()
+            # Find outliers: price > factor_threshold * median
+            def fix_price(row):
+                median = medians.get(row[group_col], np.nan)
+                price = row[price_col]
+                if median > 0 and price > factor_threshold * median:
+                    # Try dividing by 10, 100, or 1000
+                    for factor in [10, 100, 1000]:
+                        if abs(price / factor - median) < median:
+                            return price / factor
+                return price
+            df['final_amount_inr'] = df.apply(fix_price, axis=1)
+        else:
+            # Fallback: use global median
+            median = df[price_col].median()
+            df.loc[df[price_col] > factor_threshold * median, price_col] = \
+                df.loc[df[price_col] > factor_threshold * median, price_col] / 100
+        print(f"{year}: Outlier correction done for {price_col}")
 
+correct_price_outliers(dfs)
 
+#after correction
+sns.boxplot(dfs[2021]['final_amount_inr'])
+plt.show()
 
