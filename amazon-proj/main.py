@@ -33,7 +33,7 @@ def print_order_dates(dfs, n=5):
         for col in col_variants:
             if col in df.columns:
                 print(f"--- {year} ({col}) ---")
-                df[col] = pd.to_datetime(df[col], errors = 'coerce').dt.strftime('%Y-%m-%d')
+                df[col] = pd.to_datetime(df[col], errors = 'coerce', format='%d-%m-%Y')
                 print(df[col].head())
                 break
         else:
@@ -321,153 +321,363 @@ def unique_payment_names(dfs):
     return payments
 
 all_payments = unique_payment_names(dfs)
-print(all_payments)
+#print(all_payments)
 #As payment category is clean, no mapping is required.
-
 
 #.....Exploratory Data Analysis Questions......
 
-#Q1 - Yearly Sales Trend Analysis
-#Create a comprehensive revenue trend analysis showing yearly revenue growth from 
-# 2015-2025. Include percentage growth rates, trend lines, 
-# and highlight key growth periods with annotations.
+def EDA_plots(dfs):
 
-revenue = {}
-for year in sorted(dfs):
-    df = dfs[year]
-    revenue[year] = df['final_amount_inr'].sum()
+    #Q1 - Yearly Sales Trend Analysis
+    #Create a comprehensive revenue trend analysis showing yearly revenue growth from 
+    # 2015-2025. Include percentage growth rates, trend lines, 
+    # and highlight key growth periods with annotations.
 
-print(revenue)
+    revenue = {}
+    for year in sorted(dfs):
+        df = dfs[year]
+        revenue[year] = df['final_amount_inr'].sum()
 
-# Convert revenue dict to DataFrame
-revenue_df = pd.DataFrame(list(revenue.items()), columns=['Year', 'Total Revenue'])
+    #print(revenue)
 
-# Sort by Year (if needed)
-revenue_df = revenue_df.sort_values('Year')
+    # Convert revenue dict to DataFrame
+    revenue_df = pd.DataFrame(list(revenue.items()), columns=['Year', 'Total Revenue'])
 
-# Calculate percentage growth rates
-revenue_df['Pct Growth'] = revenue_df['Total Revenue'].pct_change() * 100
+    # Sort by Year (if needed)
+    revenue_df = revenue_df.sort_values('Year')
 
-# Plot revenue and trend line
-plt.figure(figsize=(10,6))
-sns.lineplot(data=revenue_df, x='Year', y='Total Revenue', marker='o', label='Revenue')
+    # Calculate percentage growth rates
+    revenue_df['Pct Growth'] = revenue_df['Total Revenue'].pct_change() * 100
 
-# Add trend line (linear regression)
-sns.regplot(data=revenue_df, x='Year', y='Total Revenue', scatter=False, color='red', label='Trend Line')
+    # Plot revenue and trend line
+    plt.figure(figsize=(10,6))
+    sns.lineplot(data=revenue_df, x='Year', y='Total Revenue', marker='o', label='Revenue')
 
-# Annotate key growth periods
-max_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Year']
-max_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Total Revenue']
-plt.annotate(f'Max Growth: {max_growth_year}', 
-             xy=(max_growth_year, max_growth_val), 
-             xytext=(max_growth_year, max_growth_val*1.05),
-             arrowprops=dict(facecolor='green', shrink=0.05),
-             fontsize=10, color='green')
+    # Add trend line (linear regression)
+    sns.regplot(data=revenue_df, x='Year', y='Total Revenue', scatter=False, color='red', label='Trend Line')
 
-min_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Year']
-min_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Total Revenue']
-plt.annotate(f'Min Growth: {min_growth_year}', 
-             xy=(min_growth_year, min_growth_val), 
-             xytext=(min_growth_year, min_growth_val*0.95),
-             arrowprops=dict(facecolor='red', shrink=0.05),
-             fontsize=10, color='red')
+    # Annotate key growth periods
+    max_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Year']
+    max_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Total Revenue']
+    plt.annotate(f'Max Growth: {max_growth_year}', 
+                xy=(max_growth_year, max_growth_val), 
+                xytext=(max_growth_year, max_growth_val*1.05),
+                arrowprops=dict(facecolor='green', shrink=0.05),
+                fontsize=10, color='green')
 
-plt.title('Yearly Revenue Trend (2015-2025) with Growth Rates & Trend Line')
-plt.xlabel('Year')
-plt.ylabel('Total Revenue (INR)')
-plt.legend()
-plt.tight_layout()
-plt.show()
+    min_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Year']
+    min_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Total Revenue']
+    plt.annotate(f'Min Growth: {min_growth_year}', 
+                xy=(min_growth_year, min_growth_val), 
+                xytext=(min_growth_year, min_growth_val*0.95),
+                arrowprops=dict(facecolor='red', shrink=0.05),
+                fontsize=10, color='red')
 
-#Q2 - Sales analysis
-#Analyze seasonal patterns in sales data. 
-#Create monthly sales heatmaps and identify peak selling months.
-#Compare seasonal trends across different years and categories.
+    plt.title('Yearly Revenue Trend (2015-2025) with Growth Rates & Trend Line')
+    plt.xlabel('Year')
+    plt.ylabel('Total Revenue (INR)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
-# Combine all data into a single DataFrame with Year and Month columns
-combined_data = []
-for year in sorted(dfs):
-    df = dfs[year]
-    if 'order_date' in df.columns:
-        df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
-        df['Year'] = year
-        df['Month'] = df['order_date'].dt.month
-        combined_data.append(df)            
-all_data = pd.concat(combined_data, ignore_index=True)
-# Group by Year and Month to get total sales
-monthly_sales = all_data.groupby(['Year', 'Month'])['final_amount_inr'].sum()
-# set monthly sales in million INR for better visualization
-monthly_sales = monthly_sales / 1_000_000 # convert to million INR
-# Pivot for heatmap
-sales_pivot = monthly_sales.unstack(level=0).fillna(0)
-plt.figure(figsize=(12, 6))
-sns.heatmap(sales_pivot, annot=True, fmt=".0f", cmap="YlGnBu")
-plt.title('Monthly Sales in million INR (2015-2025)')
-plt.xlabel('Year')
-plt.ylabel('Month')
-plt.tight_layout()              
-plt.show()
+    #Q2 - Sales analysis
+    #Analyze seasonal patterns in sales data. 
+    #Create monthly sales heatmaps and identify peak selling months.
+    #Compare seasonal trends across different years and categories.
 
-#Q3 - Customer Segmentation Analysis
+    # Combine all data into a single DataFrame with Year and Month columns
+    combined_data = []
+    for year in sorted(dfs):
+        df = dfs[year]
+        if 'order_date' in df.columns:
+            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce', format='%d-%m-%Y')
+            df['Year'] = year
+            df['Month'] = df['order_date'].dt.month
+            combined_data.append(df)            
+    all_data = pd.concat(combined_data, ignore_index=True)
+    # Group by Year and Month to get total sales
+    monthly_sales = all_data.groupby(['Year', 'Month'])['final_amount_inr'].sum()
+    # set monthly sales in million INR for better visualization
+    monthly_sales = monthly_sales / 1_000_000 # convert to million INR
+    # Pivot for heatmap
+    sales_pivot = monthly_sales.unstack(level=0).fillna(0)
+    plt.figure(figsize=(12, 6))
+    sns.heatmap(sales_pivot, annot=True, fmt=".0f", cmap="YlGnBu")
+    plt.title('Monthly Sales in million INR (2015-2025)')
+    plt.xlabel('Year')
+    plt.ylabel('Month')
+    plt.tight_layout()              
+    plt.show()
 
-#Build a customer segmentation analysis using RFM 
-# (Recency, Frequency, Monetary) methodology. 
-# Create scatter plots and segment customers into 
-# meaningful groups with actionable insights.
+    #Q3 - Customer Segmentation Analysis
 
-# Calculate RFM metrics
-import datetime as dt
-latest_date = dt.datetime(2025, 12, 31)
-rfm_data = []
-for year in sorted(dfs):
-    df = dfs[year]
-    if 'customer_id' in df.columns and 'order_date' in df.columns and 'final_amount_inr' in df.columns:
-        df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
-        rfm = df.groupby('customer_id').agg({
-            'order_date': lambda x: (latest_date - x.max()).days,
-            'customer_id': 'count',
-            'final_amount_inr': 'sum'
-        }).rename(columns={
-            'order_date': 'Recency',
-            'customer_id': 'Frequency',
-            'final_amount_inr': 'Monetary'
-        })
-        rfm_data.append(rfm)
-rfm_df = pd.concat(rfm_data, ignore_index=True) 
+    #Build a customer segmentation analysis using RFM 
+    # (Recency, Frequency, Monetary) methodology. 
+    # Create scatter plots and segment customers into 
+    # meaningful groups with actionable insights.
 
-##Groups customers into segments based on their RFM scores, 
-# such as "Champions" (high R, F, M), 
-# "Potential Loyalists" (high R, good spending, average F), 
-# or "At Risk" customers (declining R, historically high F/M). 
-# These segments can guide targeted marketing strategies.
+    # Calculate RFM metrics
+    import datetime as dt
+    latest_date = dt.datetime(2025, 12, 31)
+    rfm_data = []
+    for year in sorted(dfs):
+        df = dfs[year]
+        if 'customer_id' in df.columns and 'order_date' in df.columns and 'final_amount_inr' in df.columns:
+            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+            rfm = df.groupby('customer_id').agg({
+                'order_date': lambda x: (latest_date - x.max()).days,
+                'customer_id': 'count',
+                'final_amount_inr': 'sum'
+            }).rename(columns={
+                'order_date': 'Recency',
+                'customer_id': 'Frequency',
+                'final_amount_inr': 'Monetary'
+            })
+            rfm_data.append(rfm)
+    rfm_df = pd.concat(rfm_data, ignore_index=True) 
 
-# Heatmap of RFM
-plt.figure(figsize=(10, 6))
+    ##Groups customers into segments based on their RFM scores, 
+    # such as "Champions" (high R, F, M), 
+    # "Potential Loyalists" (high R, good spending, average F), 
+    # or "At Risk" customers (declining R, historically high F/M). 
+    # These segments can guide targeted marketing strategies.
 
-sns.heatmap(rfm_df.corr(), annot=True, cmap="coolwarm")
-plt.title('RFM Correlation Heatmap')
-plt.tight_layout()
-plt.show()  
+    # Heatmap of RFM
+    plt.figure(figsize=(10, 6))
 
-#Q4 - Payment Method Evolution Analysis
+    sns.heatmap(rfm_df.corr(), annot=True, cmap="coolwarm")
+    plt.title('RFM Correlation Heatmap')
+    plt.tight_layout()
+    plt.show()  
 
-#evolution of payment methods from 2015-2025. Show the rise of UPI, decline of COD, and create stacked area charts to demonstrate market share changes over time.
-payment_trends = []
-for year in sorted(dfs):
-    df = dfs[year]
-    if 'payment_method' in df.columns and 'final_amount_inr' in df.columns:
-        payment_summary = df.groupby('payment_method')['final_amount_inr'].sum().reset_index()
-        payment_summary['Year'] = year
-        payment_trends.append(payment_summary)
-payment_trends_df = pd.concat(payment_trends, ignore_index=True)
-payment_pivot = payment_trends_df.pivot(index='Year', columns='payment_method', values='final_amount_inr').fillna(0)
-payment_pivot_pct = payment_pivot.div(payment_pivot.sum(axis=1), axis=0) * 100
-payment_pivot_pct.plot(kind='area', stacked=True, figsize=(12, 6), colormap='tab20')
-plt.title('Payment Method Market Share Evolution (2015-2025)')
-plt.xlabel('Year')
-plt.ylabel('Market Share (%)')
-plt.legend(title='Payment Method', bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.tight_layout()
-plt.show()
+    #Q4 - Payment Method Evolution Analysis
 
-#Q5
+    #evolution of payment methods from 2015-2025. Show the rise of UPI, decline of COD, and create stacked area charts to demonstrate market share changes over time.
+    payment_trends = []
+    for year in sorted(dfs):
+        df = dfs[year]
+    
+        if 'payment_method' in df.columns and 'final_amount_inr' in df.columns:
+            payment_summary = df.groupby('payment_method')['final_amount_inr'].sum().reset_index()
+            payment_summary['Year'] = year
+            payment_trends.append(payment_summary)
+    payment_trends_df = pd.concat(payment_trends, ignore_index=True)
+    payment_pivot = payment_trends_df.pivot(index='Year', columns='payment_method', values='final_amount_inr').fillna(0)
+    payment_pivot_pct = payment_pivot.div(payment_pivot.sum(axis=1), axis=0) * 100
+    payment_pivot_pct.plot(kind='area', stacked=True, figsize=(12, 6), colormap='tab20')
+    plt.title('Payment Method Market Share Evolution (2015-2025)')
+    plt.xlabel('Year')
+    plt.ylabel('Market Share (%)')
+    plt.legend(title='Payment Method', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+    #Q5 - Perform category-wise performance analysis. 
+    # Create treemaps, bar charts, and pie charts showing revenue contribution, growth rates, 
+    # and market share for each product category.
+
+    #As electronics is the only category present in the data,
+    # we will create line chart of revenue from 2015-2025.
+
+
+    # # Plot revenue and trend line
+    plt.figure(figsize=(10,6))
+    sns.lineplot(data=revenue_df, x='Year', y='Total Revenue', marker='o', label='Revenue')
+
+    # # Annotate key growth periods
+    max_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Year']
+    max_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmax(), 'Total Revenue']
+    plt.annotate(f'Max Growth: {max_growth_year}', 
+                xy=(max_growth_year, max_growth_val), 
+                xytext=(max_growth_year, max_growth_val*1.05),
+                arrowprops=dict(facecolor='green', shrink=0.05),
+                fontsize=10, color='green')
+
+    min_growth_year = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Year']
+    min_growth_val = revenue_df.loc[revenue_df['Pct Growth'].idxmin(), 'Total Revenue']
+    plt.annotate(f'Min Growth: {min_growth_year}', 
+                xy=(min_growth_year, min_growth_val), 
+                xytext=(min_growth_year, min_growth_val*0.95),
+                arrowprops=dict(facecolor='red', shrink=0.05),
+                fontsize=10, color='red')
+
+    plt.title('Yearly Revenue for Electronics (2015-2025) with Growth Rates')
+    plt.xlabel('Year')
+    plt.ylabel('Total Revenue (INR)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    #Q6 - Analyze Prime membership impact on customer behavior. 
+    # Compare average order values, order frequency, and 
+    # category preferences between Prime and non-Prime customers 
+    # using multiple visualization types.
+
+    #convert is_prime_member to boolean as it's not done earlier
+
+    def is_prime_boolean(dfs):
+        true_values = {'true', 'yes', '1', 't', 'y'}
+        false_values = {'false', 'no', '0', 'f', 'n'}
+        col_variants = ('is_prime_member', 'Is Prime Member', 'prime_member', 'Prime Member', 'primeMember')
+        for year in sorted(dfs):
+            df = dfs[year]
+            for col in col_variants:
+                if col in df.columns:
+                    s = df[col].str.lower().str.strip()
+                    if s.isin(true_values | false_values).all():
+                        df[col] = s.map(lambda x: True if x in true_values else False)
+                        #print(f"Standardized boolean column: {col} in year {year}")
+
+    is_prime_boolean(dfs)
+
+    prime_analysis = []
+    for year in sorted(dfs):
+        df = dfs[year]
+        if 'is_prime_member' in df.columns and 'final_amount_inr' in df.columns and 'customer_id' in df.columns:
+            prime_summary = df.groupby('is_prime_member').agg({
+                'final_amount_inr': 'mean',
+                'customer_id': 'count'
+            }).rename(columns={
+                'final_amount_inr': 'Avg Order Value',
+                'customer_id': 'Order Frequency'
+            }).reset_index()
+            prime_summary['Year'] = year
+            prime_analysis.append(prime_summary)
+    prime_analysis_df = pd.concat(prime_analysis, ignore_index=True)
+    prime_analysis_df['Prime Status'] = prime_analysis_df['is_prime_member'].map({
+        False: 'Non-Prime',
+        True: 'Prime'
+    })
+
+
+    #side by side plots for avg order value as line and order frequency as pie chart
+
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(18, 7))
+
+    my_palette = {
+        'Non-Prime': "blue",
+        'Prime': "red"
+    }
+
+    # --- Plot line chart on the first subplot (axes[0]) ---
+    sns.lineplot(data=prime_analysis_df, x='Year', y='Avg Order Value', hue='Prime Status', ax = axes[0], marker='o', 
+                palette = my_palette)
+    axes[0].set_title('Average Order Value: Prime vs Non-Prime Customers (2015-2025)')
+    axes[0].set_xlabel('Year')
+    axes[0].set_ylabel('Average Order Value (INR)')
+    axes[0].legend(title='Prime Members analysis')
+
+    # --- Plot bar chart on the second subplot (axes[1]) ---
+    sns.barplot(data=prime_analysis_df, x='Year', y='Order Frequency', hue='Prime Status', ax=axes[1],
+                palette = my_palette)
+    axes[1].set_title('Total Order Frequency: Prime vs Non-Prime')
+    axes[1].set_xlabel('Prime Member Status')
+    axes[1].set_ylabel('Order Frequency')
+    axes[1].legend(title='Prime Members analysis')
+                                                        
+    # Adjust layout to prevent titles and labels from overlapping
+    plt.tight_layout()
+    plt.show()
+
+    #Q7 - Create geographic analysis of sales performance across Indian cities and states. 
+    # Build choropleth maps and bar charts showing revenue density and growth patterns by tier
+
+    revenue_geo_analysis = []
+    for year in sorted(dfs):
+        df = dfs[year]
+        if 'customer_city' in df.columns and 'final_amount_inr' in df.columns:
+            geo_summary = df.groupby(['customer_city','customer_state','customer_tier'])['final_amount_inr'].sum().reset_index()
+            geo_summary['Year'] = year
+            revenue_geo_analysis.append(geo_summary)
+    revenue_geo_df = pd.concat(revenue_geo_analysis, ignore_index=True)
+    #aggregate revenue by city across years
+    revenue_geo_df.rename(columns={'final_amount_inr': 'Revenue'}, inplace=True)
+
+    revenue_state = revenue_geo_df.groupby('customer_state')['Revenue'].sum().reset_index()
+
+    #print(revenue_geo_df.head)
+    import plotly.express as pt
+    from geopy.geocoders import Nominatim
+
+    # Create a geocoder instance with a custom user_agent
+    geolocator = Nominatim(user_agent="my_map_plot_app")
+
+    # Wrap the geocoder with a RateLimiter to enforce a minimum delay of 1 second
+    geocode_rate_limited = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+
+    # Function to get coordinates with error handling
+    def get_coordinates(state):
+        try:
+            location = geocode_rate_limited(f"{state}, India", timeout=10) # Set a longer timeout
+            if location:
+                return location.latitude, location.longitude
+        except (GeocoderTimedOut, GeocoderServiceError) as e:
+            print(f"Error geocoding {state}: {e}. Retrying with delay...")
+            # RateLimiter has built-in retry logic, but this adds more resilience
+            return None, None
+        return None, None
+
+    # Apply the function to the DataFrame
+    revenue_geo_df[['latitude', 'longitude']] = revenue_geo_df['customer_state'].apply(
+        lambda x: pd.Series(get_coordinates(x))
+    )
+
+    # Filter out any states that could not be geocoded
+    revenue_geo_df.dropna(subset=['latitude', 'longitude'], inplace=True)
+
+
+    # Scatter geo plot for revenue by state
+    fig = pt.scatter_geo(revenue_geo_df,
+                        lat ="latitude",
+                        lon ="longitude",
+                        color="customer_state",
+                        size="Revenue",
+                        hover_name="customer_state",
+                        projection="natural earth",
+                        title="Revenue (in millions) across Indian Cities",
+                        size_max=40,
+                        template="plotly_dark"
+                        )
+
+    # Manually focus the map on India
+    fig.update_geos(
+        scope='asia',
+        center={'lon': 78.9629, 'lat': 20.5937},
+        projection_scale=2 # this value determines the zoom
+    )
+    fig.show()
+
+    #bar chart for growth patterns by tier
+    tier_summary = revenue_geo_df.groupby('customer_tier')['Revenue'].sum().reset_index()
+    sns.barplot(data=tier_summary, x='customer_tier', y='Revenue')
+    plt.title('Revenue by Customer Tier')
+    plt.xlabel('Customer Tier')
+    plt.ylabel('Total Revenue in millions (INR)')
+    plt.tight_layout()
+    plt.show()
+
+# EDA_plots(dfs)
+
+#Q8 - Study festival sales impact using before/during/after analysis. 
+# Visualize revenue spikes during Diwali, Prime Day, and other 
+# festivals with detailed time series analysis.
+
+#Dfs has columns 'is_festival_period' and 'festival_name' 
+
+#sort out festivals as per time, plot time series of revenue
+#with legends for each year
+
+def plot_festival_impact(dfs):
+    festival_data = []
+    for year in sorted(dfs):
+        df = dfs[year]
+        if 'is_festival_period' in df.columns and 'festival_name' in df.columns and 'final_amount_inr' in df.columns:
+            fest_df = df[df['is_festival_period'] == True]
+            fest_summary = fest_df.groupby('festival_name')['final_amount_inr'].sum().reset_index()
+            fest_summary['Year'] = year
+            festival_data.append(fest_summary)
+            print(festival_data)
+    #festival_df = pd.concat(festival_data, ignore_index=True)
+
+
+plot_festival_impact(dfs)
