@@ -656,28 +656,81 @@ def EDA_plots(dfs):
     plt.tight_layout()
     plt.show()
 
-# EDA_plots(dfs)
 
-#Q8 - Study festival sales impact using before/during/after analysis. 
-# Visualize revenue spikes during Diwali, Prime Day, and other 
-# festivals with detailed time series analysis.
 
-#Dfs has columns 'is_festival_period' and 'festival_name' 
+    #Q8 - Study festival sales impact using before/during/after analysis. 
+    # Visualize revenue spikes during Diwali, Prime Day, and other 
+    # festivals with detailed time series analysis.
 
-#sort out festivals as per time, plot time series of revenue
-#with legends for each year
+    #Dfs has columns 'is_festival_period' and 'festival_name' 
 
-def plot_festival_impact(dfs):
-    festival_data = []
-    for year in sorted(dfs):
-        df = dfs[year]
-        if 'is_festival_period' in df.columns and 'festival_name' in df.columns and 'final_amount_inr' in df.columns:
-            fest_df = df[df['is_festival_period'] == True]
+    #sort out festivals as per time, plot time series of revenue
+    #with legends for each year
+
+    def plot_festival_impact(dfs):
+        festival_data = []
+        for year in sorted(dfs):
+            df = dfs[year]
+            fest_df = df[df['is_festival_sale'] == 'True']
             fest_summary = fest_df.groupby('festival_name')['final_amount_inr'].sum().reset_index()
             fest_summary['Year'] = year
             festival_data.append(fest_summary)
-            print(festival_data)
-    #festival_df = pd.concat(festival_data, ignore_index=True)
+                
+        festival_df = pd.concat(festival_data, ignore_index=True)
+        #print(festival_df)
+        #Time series plot for festival impact
+        plt.figure(figsize=(12, 6))
+        sns.lineplot(data=festival_df, x='Year', y='final_amount_inr', hue='festival_name', marker='o')
+        plt.title('Festival Sales Impact (2015-2025)')
+        plt.xlabel('Year')
+        plt.ylabel('Total Revenue during Festival Sales (INR)')
+        plt.legend(title='Festival Name', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+        plt.show()
 
+    plot_festival_impact(dfs)
 
-plot_festival_impact(dfs)
+    #Q9 - Analyze customer age group behavior and preferences. 
+    # Create demographic analysis with category preferences, 
+    # spending patterns, and shopping frequency across different 
+    # age segments.
+
+    def customer_age_analysis(dfs):
+        age_data = []
+        for year in sorted(dfs):
+            df = dfs[year]
+            if 'customer_age_group' in df.columns and 'final_amount_inr' in df.columns:
+                age_summary = df.pivot_table(index=['customer_age_group', 'category', 'customer_spending_tier'],
+                    values=['quantity', 'final_amount_inr'],
+                    aggfunc={'quantity': 'sum', 'final_amount_inr': 'mean'}).reset_index()
+                age_data.append(age_summary)
+                age_data_df = pd.concat(age_data, ignore_index=True)
+                age_data_df = age_data_df.groupby('customer_age_group').agg({
+                    'quantity': 'sum',
+                    'final_amount_inr': 'mean'
+                }).rename(columns={
+                    'quantity': 'Total Quantity Purchased',
+                    'final_amount_inr': 'Avg Spending'
+                }).reset_index()
+        # Plotting
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(18, 7))
+        sns.barplot(data=age_data_df, x='customer_age_group', y='Total Quantity Purchased', ax=axes[0])
+        axes[0].set_title('Total Quantity Purchased by Age Group')
+        axes[0].set_xlabel('Customer Age Group')
+        axes[0].set_ylabel('Total Quantity Purchased')
+        sns.lineplot(data=age_data_df, x='customer_age_group', y='Avg Spending', ax=axes[1])
+        axes[1].set_title('Average Spending by Age Group')
+        axes[1].set_xlabel('Customer Age Group')
+        axes[1].set_ylabel('Average Spending (INR)')
+        plt.tight_layout()
+        plt.show()
+    
+    customer_age_analysis(dfs)
+
+#EDA_plots(dfs)
+
+#Question 10
+#Build price vs demand analysis using scatter plots and correlation matrices. 
+#Analyze how pricing strategies affect sales volumes across different categories
+#and customer segments.
+
