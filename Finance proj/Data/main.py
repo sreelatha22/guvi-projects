@@ -167,8 +167,8 @@ X_train.isna().sum()
 reports[i][1]
 params
 
-mlflow.set_experiment('Car second experiment')
-mlflow.set_tracking_uri('http://127.0.0.1:5000/')
+mlflow.set_experiment('Car second experiment') #set this name in mlflow website
+mlflow.set_tracking_uri('http://127.0.0.1:5000/') #local host uri
 
 for i, element in enumerate(models):
     model_name = element[0]
